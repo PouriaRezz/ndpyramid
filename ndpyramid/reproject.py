@@ -1,10 +1,12 @@
 from __future__ import annotations  # noqa: F401
 
 from collections import defaultdict
+from typing import Union
 
 import numpy as np
 import xarray as xr
 from rasterio.warp import Resampling
+from odc.geo.xr import ODCExtensionDa
 
 from .common import Projection, ProjectionOptions
 from .utils import (
@@ -15,16 +17,47 @@ from .utils import (
 )
 
 
-def _da_reproject(da: xr.DataArray, *, dim: int, crs: str, resampling: str, transform):
+def _da_reproject(
+    da: xr.DataArray,
+    *,
+    dim: int,
+    dst_crs: Union[str, int],
+    resampling: str = "nearest"
+) -> xr.DataArray:
+    """
+    Reproject an xarray.DataArray using odc.geo's ODCExtensionDa.reproject.
+
+    Parameters
+    ----------
+    da : xr.DataArray
+        Input georeferenced DataArray.
+    dim : int
+        Output dimensions (height and width will be (dim, dim)).
+    dst_crs : str or int
+        Destination CRS (e.g. "EPSG:3857").
+    resampling : str
+        Resampling method ("nearest", "bilinear", etc.).
+
+    Returns
+    -------
+    xr.DataArray
+        Reprojected DataArray.
+    """
+
+    # Set _FillValue if missing and data is float-type
     if da.encoding.get("_FillValue") is None and np.issubdtype(da.dtype, np.floating):
         da.encoding["_FillValue"] = np.nan
-    return da.rio.reproject(
-        crs,
-        resampling=resampling,
+
+    # Reproject using ODCExtensionDa
+    reprojected = ODCExtensionDa(da).reproject(
+        how=dst_crs,
         shape=(dim, dim),
-        transform=transform,
+        resampling=resampling,
+        anchor="center",
+        tight=True
     )
 
+    return reprojected
 
 def level_reproject(
     ds: xr.Dataset,
@@ -108,9 +141,8 @@ def level_reproject(
                 da_reprojected = _da_reproject(
                     da.sel({extra_dim: index}),
                     dim=dim,
-                    crs=projection_model._crs,
+                    dst_crs=projection_model._crs,
                     resampling=Resampling[resampling_dict[k]],
-                    transform=dst_transform,
                 )
                 da_all.append(da_reprojected)
             ds_level[k] = xr.concat(da_all, ds[extra_dim])
@@ -119,9 +151,8 @@ def level_reproject(
             ds_level[k] = _da_reproject(
                 da,
                 dim=dim,
-                crs=projection_model._crs,
+                dst_crs=projection_model._crs,
                 resampling=Resampling[resampling_dict[k]],
-                transform=dst_transform,
             )
     ds_level.attrs["multiscales"] = attrs["multiscales"]
     return ds_level

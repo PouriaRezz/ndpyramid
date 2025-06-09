@@ -132,3 +132,5 @@ dmypy.json
 
 docs/generated/
 docs/notebooks-examples-gallery.txt
+
+.idea

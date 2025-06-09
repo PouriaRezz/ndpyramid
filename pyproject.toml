@@ -33,6 +33,7 @@
         "rasterio",
         "xarray[complete]>=2024.10.0",
         "zarr",
+        "odc-geo"
     ]
 
 [project.optional-dependencies]
